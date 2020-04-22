@@ -6,11 +6,12 @@ from math import sqrt
 from math import exp
 from math import pi
 from collections import defaultdict
-
+from sklearn.base import BaseEstimator, ClassifierMixin
 import numpy as np
 
 
-class GaussianNaiveBayes:
+
+class GaussianNaiveBayes(BaseEstimator, ClassifierMixin):
     """
     Implements the Gaussian Naive Bayes algorithm for classification. The likelihood of the features is assumed to be
     Gaussian.
