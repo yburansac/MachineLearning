@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import tabulate
 
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import plot_confusion_matrix
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import classification_report
@@ -14,6 +14,7 @@ from sklearn.naive_bayes import GaussianNB
 from naive_bayes import GaussianNaiveBayes
 
 import time
+import statistics
 
 
 def load_set():
@@ -147,10 +148,15 @@ def main():
 
     print()
     # SVMs have many params, use grid search to tune them, CAREFULL SUPER SLOW -> use smaller training sets for
-    # development
+    # development (internally uses cross-validation
     X_train2, X_test2, y_train2, y_test2 = train_test_split(X, y, test_size=200, train_size=500, random_state=0)
     autotune(X_train2, X_test2, y_train2, y_test2, class_names)
 
+    # cross-validation example
+    print("10-fold cross-validation scores for GNB")
+    crs_val_scrs = cross_val_score(GaussianNB(), X, y, cv=10, n_jobs=-1)
+    print(crs_val_scrs)
+    print(f"mean: {statistics.mean(crs_val_scrs):.2f}")
 
 if __name__ == '__main__':
     main()
