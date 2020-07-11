@@ -28,7 +28,7 @@ class GaussianNaiveBayes(BaseEstimator, ClassifierMixin):
         :return: self
         """
         feature_vector_width = len(X[0])
-        running_sums = defaultdict(lambda: np.zeros(feature_vector_width + 1))
+        running_sums = defaultdict(lambda: [0 for i in range(feature_vector_width + 1)])
 
         # calculate means
         for feature_vector, label in zip(X, y):
@@ -43,7 +43,8 @@ class GaussianNaiveBayes(BaseEstimator, ClassifierMixin):
 
         # calculate standard deviation
         for feature_vector in running_sums.values():
-            feature_vector[:-1].fill(0)  # zero out the vectors except the last position with class sample counts
+            # zero out the vectors except the last position with class sample counts
+            feature_vector[:-1] = [0 for i in range(feature_vector_width + 1)]
 
         for feature_vector, label in zip(X, y):
             for i in range(len(feature_vector)):
@@ -70,7 +71,7 @@ class GaussianNaiveBayes(BaseEstimator, ClassifierMixin):
         :param X: feature vectors to classify
         :return: predicted labels for X
         """
-        predictions = np.empty(shape=len(X), dtype=int)
+        predictions = []
         for i in range(len(X)):
             max_score = 0
             max_score_class = 0
@@ -82,7 +83,7 @@ class GaussianNaiveBayes(BaseEstimator, ClassifierMixin):
                 if score > max_score:
                     max_score = score
                     max_score_class = cls
-            predictions[i] = max_score_class
+            predictions.append(max_score_class)
         return predictions
 
         # -----------------------Internal-----------------
@@ -91,13 +92,10 @@ class GaussianNaiveBayes(BaseEstimator, ClassifierMixin):
     def _gauss_normal_PDF(x, mean, stdev):
         """
         Calculate the value of probability density function of normal distribution.
-        # TODO consider deleting
-        # this is a substitute for norm.pdf(x, loc, scale) from scipy.stats,
-        # it is not needed and can be deleted, probably slower
         :param x: x
         :param mean: the mean of the distribution
         :param stdev: the standard deviation of the distribution
         :return: the PDF of the distribution at x
         """
-        exponent = exp(-((x - mean) ** 2 / (2 * stdev ** 2)))
+        exponent = exp(-0.5*((x - mean) / stdev)**2)
         return (1 / (sqrt(2 * pi) * stdev)) * exponent
