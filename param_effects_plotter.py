@@ -8,7 +8,7 @@ from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.preprocessing import StandardScaler, FunctionTransformer, MinMaxScaler
 from sklearn.datasets import make_moons, make_circles, make_classification
 from sklearn.pipeline import make_pipeline
-from sklearn.svm import SVC
+from sklearn.svm import SVC, LinearSVC
 
 
 def is_matplotlib_just_insane_or_is_it_me(target_aspect_ratio: float, x_min: int, x_max: int, y_min: int, y_max: int):
@@ -32,13 +32,14 @@ def is_matplotlib_just_insane_or_is_it_me(target_aspect_ratio: float, x_min: int
 def to_plot_or_not_to_plot( # that is the question!
         studied_param="degree",
         samples=100,
-        add_all_ones_column=False,
+        add_column_of=False,
         window_title="Some plot",
         coef0=0,
         use_datasets=None,
         class_separability=1.1,
         plot_margins=False,
-        kernel_override="linear"
+        kernel_override="linear",
+        offset=(0,0)
 ):
     """
     Plots a series of plots which aim at visualisation of the effect on a decision boundary a change of a parameter of
@@ -50,7 +51,7 @@ def to_plot_or_not_to_plot( # that is the question!
 
     params={
         "kernel": ['linear', 'poly', 'rbf'],
-        "C" : [1, 5, 10],
+        "C" : [1, 5, 100],
         "degree": [2,3],
         "gamma": [0.1, 2, 25]
     }
@@ -64,7 +65,8 @@ def to_plot_or_not_to_plot( # that is the question!
         if studied_param == 'kernel':
             classifiers.append(SVC(kernel=i, C=1, coef0=coef0, degree=2))
         if studied_param == 'C':
-            classifiers.append(SVC(kernel=kernel_override, C=i, coef0=coef0))
+            #classifiers.append(SVC(kernel=kernel_override, C=i, coef0=coef0))
+            classifiers.append(LinearSVC(dual=False, penalty='l2', intercept_scaling=10, fit_intercept=True))
         if studied_param == 'gamma':
             classifiers.append(SVC(kernel='rbf', C=1, gamma=i, coef0=coef0))
 
@@ -107,12 +109,12 @@ def to_plot_or_not_to_plot( # that is the question!
         # X = MinMaxScaler().fit_transform(X)
         def translation(M):
             for V in M:
-                V[0]+=1.5
-                V[1]+=0
+                V[0]+=offset[0]
+                V[1]+=offset[1]
             return M
-        # X = FunctionTransformer(translation, check_inverse=False).fit_transform(X)
-        if add_all_ones_column:
-            X = np.c_[X, np.ones(len(X))]
+        X = FunctionTransformer(translation, check_inverse=False).fit_transform(X)
+        if add_column_of is not False:
+            X = np.c_[X, np.full(len(X),add_column_of)]
 
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.4, random_state=42)
         view_area_margin = 2
@@ -161,7 +163,8 @@ def to_plot_or_not_to_plot( # that is the question!
                     Z = clf.decision_function(np.c_[xx.ravel(), yy.ravel()])
                     #Z = clf.predict(np.c_[xx.ravel(), yy.ravel()])
                 except ValueError:
-                    Z = clf.decision_function(np.c_[xx.ravel(), yy.ravel(), np.ones(len(xx.ravel()))])
+                    Z = clf.decision_function(np.c_[xx.ravel(), yy.ravel(), np.full(len(xx.ravel()),add_column_of)])
+                    #Z = clf.decision_function(np.c_[xx.ravel(), yy.ravel(), np.ones(len(xx.ravel()))])
                     #Z = clf.predict(np.c_[xx.ravel(), yy.ravel(), np.ones(len(xx.ravel()))])
             else:
                 Z = clf.predict_proba(np.c_[xx.ravel(), yy.ravel()])[:, 1]
@@ -177,7 +180,7 @@ def to_plot_or_not_to_plot( # that is the question!
 
 
             # Plot support vectors
-            ax.scatter(clf.support_vectors_[:, 0], clf.support_vectors_[:, 1], facecolors='none', zorder=2, edgecolors='gold',linewidths=2)
+            #ax.scatter(clf.support_vectors_[:, 0], clf.support_vectors_[:, 1], facecolors='none', zorder=2, edgecolors='gold',linewidths=2)
             # Plot also the training points
             ax.scatter(X_train[:, 0], X_train[:, 1], c=y_train, cmap=cm_bright,
                        edgecolors='black', s=25, zorder=3)
@@ -234,7 +237,7 @@ scenarios={
     "Figure_2c":{
         "window_title": "Figure_2c",
         "studied_param": "degree",
-        "add_all_ones_column": True,
+        "add_column_of": 1,
     },
     "Figure_3a":{
         "window_title": "Figure_3a",
@@ -269,7 +272,18 @@ scenarios={
         "use_datasets": ["moons"],
         "plot_margins":True
     },
+    "Experiment":{
+        "window_title": "Experiment",
+        "studied_param": "C",
+        "samples": 90,
+        "use_datasets": ["moons","linearly_separable"],
+        "plot_margins":True,
+        "kernel_override": "linear",
+        "offset":(400,20),
+        #"add_column_of": 400,
+    },
+
 }
 
-to_plot_or_not_to_plot(**scenarios["Figure_3d"])
+to_plot_or_not_to_plot(**scenarios["Experiment"])
 #there_is_no_spoon()

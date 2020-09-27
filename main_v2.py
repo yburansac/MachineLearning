@@ -4,17 +4,18 @@ import numpy as np
 import matplotlib.pyplot as plt
 import tabulate
 import pickle
+import scipy.stats
 
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import plot_confusion_matrix
 from sklearn.model_selection import GridSearchCV, cross_validate, ShuffleSplit, StratifiedKFold
 from sklearn.metrics import classification_report
-from sklearn.preprocessing import normalize, minmax_scale, Normalizer, MinMaxScaler
+from sklearn.preprocessing import normalize, minmax_scale, Normalizer, MinMaxScaler, MaxAbsScaler, binarize
 from sklearn.svm import SVC
 from sklearn.pipeline import Pipeline
 from sklearn.base import TransformerMixin, BaseEstimator
 
-from sklearn.naive_bayes import GaussianNB, MultinomialNB
+from sklearn.naive_bayes import GaussianNB, MultinomialNB, BernoulliNB
 from naive_bayes import GaussianNaiveBayes
 
 import time
@@ -114,12 +115,16 @@ def print_table_of_2_params(results,param_x,param_y, title="Some table"):
     print_table_title(title)
     print(tabulate.tabulate(table,headers=param_list_y, showindex=param_list_x))
 
-def print_table_of_metric_for_group_results_on_datasets(results,dataset_names,pipeline_names,group_names,metric,
-                                                        apply_filter=None, title="Some table", as_percentage=False):
+def print_results(results, dataset_names, pipeline_names, group_names, metric,
+                  scope='gridsearch',  apply_filter=None, title="Some table", as_percentage=False,
+                  calculate_statistic=statistics.mean, floatfmt=".2f"):
 
     index = []
     for group_name in group_names:
-        params=results[dataset_names[0]][pipeline_names[0]][group_name]['estimator'][0].cv_results_['params']
+        if scope == 'gridsearch':
+            params=results[dataset_names[0]][pipeline_names[0]][group_name]['estimator'][0].cv_results_['params']
+        else:
+            params=[group_name]
         index.extend(params)
     table = [[] for i in range(len(index))]
     header = []
@@ -128,17 +133,22 @@ def print_table_of_metric_for_group_results_on_datasets(results,dataset_names,pi
             j = 0
             header.append(f'{dataset_name}\n{pipeline_name}')
             for group_name in group_names:
-                metric_scores = results[dataset_name][pipeline_name][group_name]['estimator'][0].cv_results_[metric]
-                for i in range(len(metric_scores)):
-                    table[j].append(metric_scores[i]*100 if as_percentage else 1)
-                    j+=1
+                if scope == "gridsearch":
+                    metric_scores = results[dataset_name][pipeline_name][group_name]['estimator'][0].cv_results_[metric]
+                    for i in range(len(metric_scores)):
+                        table[j].append(metric_scores[i] * 100 if as_percentage else metric_scores[i])
+                        j += 1
+                else:
+                    metric_scores = calculate_statistic(results[dataset_name][pipeline_name][group_name][metric])
+                    table[j].append(metric_scores * 100 if as_percentage else metric_scores)
+                    j += 1
 
     print_table_title(title)
 
     if apply_filter:
         index, table = zip(*filter(apply_filter, zip(index, table)))
 
-    print(tabulate.tabulate(table, headers=header, showindex=index, floatfmt=".2f"))
+    print(tabulate.tabulate(table, headers=header, showindex=index, floatfmt=floatfmt))
 
 
 def print_table_title(title, terminal_width=120):
@@ -152,12 +162,25 @@ def transform_tf_to_tf_idf(X):
     df = np.zeros(X.shape[1])
     for row in range(X.shape[0]):
         for col in range(X.shape[1]):
-            if X[row][col] > 0:
+            if X[row,col] > 0:
                 df[col] += 1
     for row in range(X.shape[0]):
         for col in range(X.shape[1]):
-            X_[row][col] = X[row][col]*(-np.log(max(df[col],0.0000001)/len(X)))
+            X_[row,col] = X[row,col]*(-np.log((df[col]+1)/(len(X)+1)))
     return X_
+
+class TFtoTF_IDF_trnasformer(TransformerMixin):
+    def _init__(self):
+        self.idf=None
+    def fit(self, X,y=None):
+        df = np.count_nonzero(X, 0)
+        smoothing = 1
+        n = X.shape[0] + smoothing
+        df += smoothing
+        self.idf = -np.log(df/n)
+        return self
+    def transform(self,X):
+        return self.idf * X
 
 def plot_learning_curves_macro(estimator1, estimator2, e1_name, e2_name, title, datset, dataset_labels, e1_is_slow=False, e2_is_slow=False):
     from learning_curves import plot_learning_curve, plot_comarison_of_learing_curves
@@ -198,7 +221,7 @@ def main():
                 ("estimator", SVC(max_iter=1000000))
             ]),
             "scaled": Pipeline([
-                ("preprocessing", MinMaxScaler()),
+                ("preprocessing", MaxAbsScaler()),
                 ("estimator", SVC(max_iter=1000000))
             ]),
         }
@@ -246,7 +269,7 @@ def main():
 
         results = {dataset:{ pipeline:{ group: {} for group in param_grid.keys()} for pipeline in pipelines.keys()} for dataset in datasets.keys()}
         param_search_cv = StratifiedKFold(n_splits=5,shuffle=True, random_state=42)
-        eval_cv = StratifiedKFold(n_splits=5,shuffle=True, random_state=42)
+        eval_cv = StratifiedKFold(n_splits=10,shuffle=True, random_state=42)
         progress = np.zeros(3,dtype=np.uint16)
         for dataset_name, dataset in datasets.items():
             progress = progress*np.array([1,0,0], dtype=np.uint16) + np.array([1,0,0], dtype=np.uint16)
@@ -265,7 +288,7 @@ def main():
         with open(pickled_train_set_results, 'wb') as file:
             pickle.dump(results, file)
 
-    task = "table_4"
+    task = "experiment"
     if task == "table_1":
         table_1(results)
     elif task == "table_2":
@@ -274,43 +297,197 @@ def main():
         table_3(results)
     elif task == "table_4":
         table_4(results)
+    elif task == "table_5":
+        table_5(results)
+    elif task == "table_6":
+        table_6(results)
+    elif task == "table_7":
+        table_7(results)
+    elif task == "table_8":
+        table_8(results)
     elif task == "figure_1":
         figure_1(results, X, y)
+    elif task == "experiment":
+        experiment(X,y)
+    elif task == "experiment2":
+        experiment2(X,y)
+    elif task == "histograms":
+        plot_feature_histogram(minmax_scale(X), y, feature=1)
+    elif task == "plot_2d":
+        plot_2_dim_of_data(minmax_scale(X),y)
 
 def table_1(train_set_results):
     """Table of scores of RBF kernel SVM with varying C and Gamma"""
     print_table_of_2_params(train_set_results['tf']['plain']['svm-rbf'], 'estimator__C','estimator__gamma',"C vs gama")
 def table_2(train_set_results):
     """Table showcases rising training times with higher C"""
-    print_table_of_metric_for_group_results_on_datasets(train_set_results,
-                                                           list(train_set_results.keys()),
-                                                           ['plain', 'normalized', 'scaled'],
-                                                           ["svm-rbf", "svm-linear", "svm-poly-d2-c00"],
+    print_results(train_set_results,
+                             list(train_set_results.keys()),
+                             ['plain', 'normalized', 'scaled'],
+                             ["svm-rbf", "svm-linear", "svm-poly-d2-c00"],
                                                            "mean_fit_time",
-                                                           apply_filter=lambda x: x[0].get('estimator__coef0',0) == 0 and x[0].get('estimator__gamma',0.001) == 0.001
-                                                           )
+                             apply_filter=lambda x: x[0].get('estimator__coef0',0) == 0 and x[0].get('estimator__gamma',0.001) == 0.001,
+                             title="Table of mean fit time"
+                             )
 def table_3(train_set_results):
     """Table showcases rising training times with higher C"""
-    print_table_of_metric_for_group_results_on_datasets(train_set_results,
-                                                           list(train_set_results.keys()),
-                                                           ['plain', 'normalized', 'scaled'],
-                                                           ["svm-rbf", "svm-linear", "svm-poly-d2-c00"],
+    print_results(train_set_results,
+                             list(train_set_results.keys()),
+                             ['plain', 'normalized', 'scaled'],
+                             ["svm-rbf", "svm-linear", "svm-poly-d2-c00"],
                                                            "mean_score_time",
-                                                           apply_filter=lambda x: x[0].get('estimator__coef0',0) == 0 and x[0].get('estimator__gamma',0.001) == 0.001
-                                                           )
+                             apply_filter=lambda x: x[0].get('estimator__gamma',0.001) == 0.001,
+                             title="Table of mean score time"
+                             )
 def table_4(train_set_results):
     """Table showcases rising training times with higher C"""
-    print_table_of_metric_for_group_results_on_datasets(train_set_results,
-                                                           list(train_set_results.keys()),
-                                                           ['plain', 'normalized', 'scaled'],
-                                                           ["svm-rbf", "svm-linear", "svm-poly-d2-c00"],
+    print_results(train_set_results,
+                             list(train_set_results.keys()),
+                             ['plain', 'normalized', 'scaled'],
+                             ["svm-rbf", "svm-linear", "svm-poly-d2-c00"],
                                                            "mean_test_score",
-                                                           as_percentage=True,
-                                                           apply_filter=lambda x: x[0].get('estimator__coef0',0) == 0 and x[0].get('estimator__gamma',0.001) == 0.001
-                                                           )
+                             as_percentage=True,
+                             apply_filter=lambda x: x[0].get('estimator__gamma',0.001) == 0.001,
+                             title="Table of mean score"
+                             )
+def table_5(results):
+    "Show coef0 0 vs 1"
+    print_results(results,
+                             list(results.keys()),
+                             ['plain', 'normalized', 'scaled'],
+                             ["svm-linear", "svm-poly-d2-c00", "svm-poly-d2-c01"],
+                                                        "mean_test_score",
+                             as_percentage=True,
+                             apply_filter=lambda x: x[0].get('estimator__gamma',
+                                                                                        0.001) == 0.001,
+                             title="Table of mean score"
+                             )
+
+def table_6(results):
+    "Show coef0 0 vs 1"
+    print_results(results,
+                             list(results.keys()),
+                             ['plain', 'normalized', 'scaled'],
+                             ["svm-linear", "svm-poly-d2-c00", "svm-poly-d2-c01"],
+                                                        "mean_fit_time",
+                             title="Table of mean fitting time"
+                             )
+
+def table_7(results):
+    "Show coef0 0 vs 1"
+    print_results(results,
+                  list(results.keys()),
+                  ['plain', 'normalized', 'scaled'],
+                  results['tf']['plain'].keys(),
+                  "test_score",
+                  title="Table of mean fitting time",
+                  scope="crossvalidation",
+                  as_percentage = True,
+                  )
+
+def table_8(results):
+    "Show coef0 0 vs 1"
+    print_results(results,
+                  list(results.keys()),
+                  ['plain', 'normalized', 'scaled'],
+                  results['tf']['plain'].keys(),
+                  "test_score",
+                  title="Table of mean fitting time",
+                  scope="crossvalidation",
+                  as_percentage = True,
+                  calculate_statistic= scipy.stats.sem
+                  )
+
+
 def figure_1(train_set_results, X_test,y_test):
     best_SVM = max([(group_results['best_score'],group_results['best'])for group_results in train_set_results['tf'].values()],
                    key=lambda x: x[0])
     plot_learning_curves_macro(SVC(**best_SVM[1]),GaussianNaiveBayes(),"SVM", "GNB", "SVM vs GNB training curves",X_test,y_test, e1_is_slow=True)
+
+def experiment(X,y):
+    X_bin = binarize(X)
+    eval_cv = StratifiedKFold(n_splits=10, shuffle=True, random_state=42)
+    print("GaussianNB")
+    res = cross_val_score(GaussianNB(),X,y,cv=eval_cv, n_jobs=-1)
+    print(statistics.mean(res))
+    print("GaussianNB + idf")
+    tfpipe = Pipeline([("idf", TFtoTF_IDF_trnasformer()), ("nb", GaussianNB())])
+    res = cross_val_score(tfpipe, X, y, cv=eval_cv, n_jobs=-1)
+    print(statistics.mean(res))
+    print("Multinominal +idf")
+    tfpipe = Pipeline([("idf", TFtoTF_IDF_trnasformer()), ("nb", MultinomialNB())])
+    res = cross_val_score(tfpipe, X, y, cv=eval_cv, n_jobs=-1)
+    print(statistics.mean(res))
+    print("SVM + idf")
+    tfpipe = Pipeline([("idf", TFtoTF_IDF_trnasformer()), ("svm", SVC(C=10000))])
+    res = cross_val_score(tfpipe, X, y, cv=eval_cv, n_jobs=-1)
+    print(statistics.mean(res))
+    print("MultinominaNB")
+    res = cross_val_score(MultinomialNB(), X, y, cv=eval_cv, n_jobs=-1)
+    print(statistics.mean(res))
+    print("GaussianNB binarized")
+    res = cross_val_score(GaussianNB(),X_bin,y,cv=eval_cv, n_jobs=-1)
+    print(statistics.mean(res))
+    print("MultinominalNB binarized")
+    res = cross_val_score(MultinomialNB(), X_bin, y, cv=eval_cv, n_jobs=-1)
+    print(statistics.mean(res))
+    print("BernoulliNB binarized")
+    res = cross_val_score(BernoulliNB(), X_bin, y, cv=eval_cv, n_jobs=-1)
+    print(statistics.mean(res))
+
+
+
+
+
+def plot_feature_histogram(X,y, feature=0):
+    X = normalize(X)
+    filter_mask= y==0
+    X_class0 = X[filter_mask,feature]
+    filter_mask= y==1
+    X_class1 = X[filter_mask, feature]
+
+    filter_0=True
+    if filter_0:
+        filter_mask = [i!=0 for i in X_class0]
+        X_class0 = X_class0[filter_mask]
+
+        filter_mask = [i != 0 for i in X_class1]
+        X_class1 = X_class1[filter_mask]
+
+
+    #plt.ylim(0,200)
+    plt.hist((X_class0, X_class1), bins=[-0.01,0.00001]+[0.02*i for i in range(1,40)],density=True)
+
+    x = np.linspace(-0.01, max(X_class1.max(), X_class0.max()), 200)
+    plt.plot(x, scipy.stats.norm.pdf(x, X_class0.mean(), X_class0.std()))
+    plt.plot(x, scipy.stats.norm.pdf(x, X_class1.mean(), X_class1.std()))
+    plt.show()
+
+def plot_2_dim_of_data(X,y):
+    #X=normalize(X)
+    X_reduced = X[:,[2,5,10]]
+    X_reduced = normalize(X_reduced)
+    fig = plt.figure()
+    if True:
+        ax = fig.add_subplot(projection='3d')
+        #ax.set_aspect('equal')
+        ax.scatter(X_reduced[:,0],X_reduced[:,1],X_reduced[:,2],c=y)
+        plt.show()
+
+def experiment2(X,y):
+    filter_mask = y == 0
+    X_class0 = X[filter_mask]
+    filter_mask = y == 1
+    X_class1 = X[filter_mask]
+
+    X_class0 = binarize(X_class0)
+    X_class1 = binarize(X_class1)
+
+    X_class0 = X_class0.sum(0)
+    X_class1 = X_class1.sum(0)
+
+    print(X_class0)
+    print()
+    print(X_class1)
 
 main()
