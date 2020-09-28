@@ -1,14 +1,14 @@
 import numpy as np
-import math
-import statistics
-import tabulate
 from matplotlib import pyplot as plt
 from matplotlib.colors import ListedColormap
-from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.preprocessing import StandardScaler, FunctionTransformer, MinMaxScaler
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 from sklearn.datasets import make_moons, make_circles, make_classification
-from sklearn.pipeline import make_pipeline
-from sklearn.svm import SVC, LinearSVC
+from sklearn.svm import SVC
+
+# this utility allows some experimentation with the kernels in 2D, the predefined parameter sets at he end this file
+# should produce the figures in the report, but the figure numbering doesn't match since the report has changed since
+# writing this script
 
 
 def is_matplotlib_just_insane_or_is_it_me(target_aspect_ratio: float, x_min: int, x_max: int, y_min: int, y_max: int):
@@ -29,17 +29,17 @@ def is_matplotlib_just_insane_or_is_it_me(target_aspect_ratio: float, x_min: int
         x_min, x_max = x_min - x_cor, x_max + x_cor
     return x_min, x_max, y_min, y_max
 
+
 def to_plot_or_not_to_plot( # that is the question!
         studied_param="degree",
         samples=100,
-        add_column_of=False,
+        add_column_of=None,
         window_title="Some plot",
         coef0=0,
         use_datasets=None,
         class_separability=1.1,
         plot_margins=False,
         kernel_override="linear",
-        offset=(0,0)
 ):
     """
     Plots a series of plots which aim at visualisation of the effect on a decision boundary a change of a parameter of
@@ -51,8 +51,8 @@ def to_plot_or_not_to_plot( # that is the question!
 
     params={
         "kernel": ['linear', 'poly', 'rbf'],
-        "C" : [1, 5, 100],
-        "degree": [2,3],
+        "C" : [1, 5, 10],
+        "degree": [2, 3],
         "gamma": [0.1, 2, 25]
     }
 
@@ -65,8 +65,7 @@ def to_plot_or_not_to_plot( # that is the question!
         if studied_param == 'kernel':
             classifiers.append(SVC(kernel=i, C=1, coef0=coef0, degree=2))
         if studied_param == 'C':
-            #classifiers.append(SVC(kernel=kernel_override, C=i, coef0=coef0))
-            classifiers.append(LinearSVC(dual=False, penalty='l2', intercept_scaling=10, fit_intercept=True))
+            classifiers.append(SVC(kernel=kernel_override, C=i, coef0=coef0))
         if studied_param == 'gamma':
             classifiers.append(SVC(kernel='rbf', C=1, gamma=i, coef0=coef0))
 
@@ -88,7 +87,6 @@ def to_plot_or_not_to_plot( # that is the question!
         use_datasets = all_datasets.keys()
     datasets = [all_datasets[dataset_name] for dataset_name in use_datasets]
 
-
     plt.rc('xtick', labelsize=8)  # fontsize of the tick labels
     plt.rc('ytick', labelsize=8)  # fontsize of the tick labels
 
@@ -96,9 +94,8 @@ def to_plot_or_not_to_plot( # that is the question!
     dx, dy = 4, 3
     figsize = plt.figaspect(float(dy * nrows) / float(dx * ncols))
 
-    fig, subplot_list = plt.subplots(len(datasets),len(classifiers)+1, sharex='row', sharey='row', figsize=figsize, num=window_title)
-
-
+    fig, subplot_list = plt.subplots(len(datasets),len(classifiers)+1,
+                                     sharex='row', sharey='row', figsize=figsize, num=window_title)
 
     i = 0
     top_row = True
@@ -106,14 +103,7 @@ def to_plot_or_not_to_plot( # that is the question!
     for X, y in datasets:
         # preprocess dataset, split into training and test part
         X = StandardScaler().fit_transform(X)
-        # X = MinMaxScaler().fit_transform(X)
-        def translation(M):
-            for V in M:
-                V[0]+=offset[0]
-                V[1]+=offset[1]
-            return M
-        X = FunctionTransformer(translation, check_inverse=False).fit_transform(X)
-        if add_column_of is not False:
+        if add_column_of is not None:
             X = np.c_[X, np.full(len(X),add_column_of)]
 
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.4, random_state=42)
@@ -143,10 +133,6 @@ def to_plot_or_not_to_plot( # that is the question!
         ax.tick_params(axis='both', which='major', pad=2)
         ax.set_xlim(x_min, x_max)
         ax.set_ylim(y_min, y_max)
-        #ax.set_xticks(())
-        #ax.set_yticks(())
-
-
 
         # iterate over classifiers
         for name, clf in zip(names, classifiers):
@@ -161,17 +147,14 @@ def to_plot_or_not_to_plot( # that is the question!
             if hasattr(clf, "decision_function"):
                 try:
                     Z = clf.decision_function(np.c_[xx.ravel(), yy.ravel()])
-                    #Z = clf.predict(np.c_[xx.ravel(), yy.ravel()])
                 except ValueError:
                     Z = clf.decision_function(np.c_[xx.ravel(), yy.ravel(), np.full(len(xx.ravel()),add_column_of)])
-                    #Z = clf.decision_function(np.c_[xx.ravel(), yy.ravel(), np.ones(len(xx.ravel()))])
-                    #Z = clf.predict(np.c_[xx.ravel(), yy.ravel(), np.ones(len(xx.ravel()))])
             else:
                 Z = clf.predict_proba(np.c_[xx.ravel(), yy.ravel()])[:, 1]
 
             # Put the result into a color plot
             Z = Z.reshape(xx.shape)
-            ax.pcolormesh(xx, yy, Z > 0, cmap=cm)
+            ax.pcolormesh(xx, yy, Z > 0, cmap=cm, shading="auto")
             if plot_margins:
                 ax.contour(xx, yy, Z, colors=['k', 'k', 'k'],
                            linestyles=['--', '-', '--'], levels=[-1.0, 0, 1.0])
@@ -180,47 +163,22 @@ def to_plot_or_not_to_plot( # that is the question!
 
 
             # Plot support vectors
-            #ax.scatter(clf.support_vectors_[:, 0], clf.support_vectors_[:, 1], facecolors='none', zorder=2, edgecolors='gold',linewidths=2)
+            ax.scatter(clf.support_vectors_[:, 0], clf.support_vectors_[:, 1], facecolors='none', zorder=2, edgecolors='gold',linewidths=2)
             # Plot also the training points
             ax.scatter(X_train[:, 0], X_train[:, 1], c=y_train, cmap=cm_bright,
                        edgecolors='black', s=25, zorder=3)
-            # and testing points
-            #ax.scatter(X_test[:, 0], X_test[:, 1], c=y_test, cmap=cm_bright,
-            #           alpha=0.6, edgecolors='black', s=25)
-            #ax.set_aspect('equal')
 
-            #ax.set_xlim(x_min, x_max)
-            #ax.set_ylim(x_min, x_max)
-            #ax.set_xticks(())
-            #ax.set_yticks(())
             if top_row:
                 ax.set_title(name.upper())
             ax.text( 0.95,0.08,('%.2f' % score).lstrip('0'),
                     size=15, horizontalalignment='right', transform=ax.transAxes)
 
         top_row=False
-
-    #figure.subplots_adjust(left=.02, right=.98)
-    #plt.subplots_adjust(wspace=0.02, hspace=0.11)
     plt.tight_layout(pad=0)
     plt.show()
 
-def there_is_no_spoon():
-    moons = make_classification(n_samples=200, n_features=2, n_redundant=0, n_informative=2,
-                               random_state=21, n_clusters_per_class=1, class_sep=0.8)
-    clfs = [SVC(kernel="linear", C=i) for i in [0.01,1,100]]
-    result_array = []
-    for portion_of_dataset in range(40,201,20):
-        x=moons[0][:portion_of_dataset]
-        y=moons[1][:portion_of_dataset]
-        result_array.append([])
-        for clf in clfs:
-            result_array[-1].append(statistics.mean(cross_val_score(clf, x, y, cv=10)))
-    print(tabulate.tabulate(result_array))
-
-
 # these combinations of parameters correspond to figures in the report
-scenarios={
+scenarios = {
     "Figure_1":{
         "window_title": "Figure_1",
         "studied_param": "kernel",
@@ -270,20 +228,8 @@ scenarios={
         "studied_param": "gamma",
         "samples": 80,
         "use_datasets": ["moons"],
-        "plot_margins":True
-    },
-    "Experiment":{
-        "window_title": "Experiment",
-        "studied_param": "C",
-        "samples": 90,
-        "use_datasets": ["moons","linearly_separable"],
-        "plot_margins":True,
-        "kernel_override": "linear",
-        "offset":(400,20),
-        #"add_column_of": 400,
-    },
-
+        "plot_margins": True
+    }
 }
 
-to_plot_or_not_to_plot(**scenarios["Experiment"])
-#there_is_no_spoon()
+to_plot_or_not_to_plot(**scenarios["Figure_3d"])

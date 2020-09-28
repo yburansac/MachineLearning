@@ -1,10 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.naive_bayes import GaussianNB
-from sklearn.svm import SVC
-from sklearn.datasets import load_digits
 from sklearn.model_selection import learning_curve
-from sklearn.model_selection import ShuffleSplit
+
+# This file was adapted from Scikit example but a new function was added to plot 2 learning curves in one graph
 
 
 def plot_learning_curve(estimator, title, X, y, cv=None,
@@ -80,19 +78,20 @@ def plot_learning_curve(estimator, title, X, y, cv=None,
     # Plot learning curve
     axes.grid()
     axes.fill_between(train_sizes, train_scores_mean - train_scores_std,
-                         train_scores_mean + train_scores_std, alpha=0.2,
-                         color="r")
+                      train_scores_mean + train_scores_std, alpha=0.2,
+                      color="r")
     axes.fill_between(train_sizes, test_scores_mean - test_scores_std,
-                         test_scores_mean + test_scores_std, alpha=0.2,
-                         color="g")
+                      test_scores_mean + test_scores_std, alpha=0.2,
+                      color="g")
     axes.plot(train_sizes, train_scores_mean, 'o-', color="r",
-                 label="Training score")
+              label="Training score")
     axes.plot(train_sizes, test_scores_mean, 'o-', color="g",
-                 label="Cross-validation score")
+              label="Cross-validation score")
     axes.set_xlim(left=0)
     axes.legend(loc="best")
 
     return plt
+
 
 def plot_comarison_of_learing_curves(estimator1, estimator2, e1_name, e2_name, title, X, y, cv1, cv2,
                         n_jobs=None, train_sizes=np.linspace(.1, 1.0, 5)):
